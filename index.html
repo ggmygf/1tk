@@ -134,10 +134,8 @@
             let ref = getCookie(cookieName);
             if (ref) {
                 ticketInput.placeholder = 'Reading ticket...';
-                // Simulate 2-second delay
-                setTimeout(() => {
-                    fetchTicket(ref);
-                }, 2000);
+                fetchTicket(ref);
+
             } else {
                 ref = generateRef();
                 setCookie(cookieName, ref);
