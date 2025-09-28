@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Manage Tickets</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #f0f0f0;
+            margin: 20px;
+        }
+        h1 {
+            text-align: center;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .ticket-list {
+            list-style: none;
+            padding: 0;
+        }
+        .ticket-item {
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: white;
+            gap: 10px;
+        }
+        .ticket-ref {
+            font-weight: bold;
+            min-width: 120px;
+        }
+        .ticket-content {
+            flex-grow: 1;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        .edit-button {
+            padding: 8px 12px;
+            font-size: 0.9em;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-left: 10px;
+            flex-shrink: 0;
+        }
+        .edit-button:hover { background-color: #0056b3; }
+
+        #edit-modal {
+            display: none; /* hidden by default */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        #edit-modal.show { display: flex; }
+
+        #edit-form {
+            background-color: white;
+            padding: 20px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            text-align: center;
+            width: 90%;
+            max-width: 600px;
+        }
+        #edit-textarea {
+            width: 100%;
+            height: 200px;
+            margin-bottom: 10px;
+            padding: 10px;
+            font-size: 1em;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+        .modal-buttons button {
+            margin: 5px;
+            padding: 8px 15px;
+            font-size: 0.9em;
+            border-radius: 3px;
+            cursor: pointer;
+            border: none;
+        }
+        .modal-buttons .save { background-color: #4CAF50; color: white; }
+        .modal-buttons .save:hover { background-color: #45a049; }
+        .modal-buttons .cancel { background-color: #f44336; color: white; }
+        .modal-buttons .cancel:hover { background-color: #d32f2f; }
+    </style>
+</head>
+<body>
+    <h1>All Tickets</h1>
+    <ul class="ticket-list" id="all-tickets">
+        <li>Loading tickets...</li>
+    </ul>
+
+    <div id="edit-modal" aria-hidden="true">
+        <div id="edit-form" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+            <h2 id="edit-title">Edit Ticket</h2>
+            <textarea id="edit-textarea" aria-label="Ticket content"></textarea>
+            <div class="modal-buttons">
+                <button class="save" id="save-btn">Save</button>
+                <button class="cancel" id="cancel-btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const allTicketsList = document.getElementById('all-tickets');
+        const editModal = document.getElementById('edit-modal');
+        const editTextarea = document.getElementById('edit-textarea');
+        const saveBtn = document.getElementById('save-btn');
+        const cancelBtn = document.getElementById('cancel-btn');
+
+        let currentTicketRef = null;
+
+        async function fetchAllTickets() {
+            allTicketsList.innerHTML = '<li>Loading tickets...</li>';
+            try {
+                const response = await fetch('/.netlify/functions/get-all-tickets');
+                if (!response.ok) {
+                    allTicketsList.innerHTML = '<li>Error loading tickets.</li>';
+                    console.error('Error fetching all tickets:', response.status);
+                    return;
+                }
+                const data = await response.json();
+                renderTicketList(data);
+            } catch (err) {
+                allTicketsList.innerHTML = '<li>Error loading tickets.</li>';
+                console.error('Error fetching all tickets:', err);
+            }
+        }
+
+        function renderTicketList(tickets) {
+            allTicketsList.innerHTML = '';
+            if (!Array.isArray(tickets) || tickets.length === 0) {
+                allTicketsList.innerHTML = '<li>No tickets found.</li>';
+                return;
+            }
+
+            tickets.forEach(ticket => {
+                const listItem = document.createElement('li');
+                listItem.className = 'ticket-item';
+
+                const refSpan = document.createElement('span');
+                refSpan.className = 'ticket-ref';
+                refSpan.textContent = ticket.ref ?? '';
+
+                const contentSpan = document.createElement('span');
+                contentSpan.className = 'ticket-content';
+                // Use textContent to avoid XSS and preserve raw text
+                contentSpan.textContent = ticket.content ?? '';
+
+                const button = document.createElement('button');
+                button.className = 'edit-button';
+                button.type = 'button';
+                button.textContent = 'Edit';
+                // Attach safe event listener with closure values
+                button.addEventListener('click', () => openEditModal(ticket.ref, ticket.content));
+
+                listItem.appendChild(refSpan);
+                listItem.appendChild(contentSpan);
+                listItem.appendChild(button);
+
+                allTicketsList.appendChild(listItem);
+            });
+        }
+
+        function openEditModal(ref, content) {
+            currentTicketRef = ref;
+            editTextarea.value = content ?? '';
+            editModal.classList.add('show');
+            editModal.setAttribute('aria-hidden', 'false');
+            // focus for accessibility
+            editTextarea.focus();
+        }
+
+        function closeEditModal() {
+            editModal.classList.remove('show');
+            editModal.setAttribute('aria-hidden', 'true');
+            currentTicketRef = null;
+            // clear textarea optionally
+            // editTextarea.value = '';
+        }
+
+        // Save handler
+        saveBtn.addEventListener('click', async () => {
+            if (!currentTicketRef) return;
+            const content = editTextarea.value;
+            try {
+                const response = await fetch('/.netlify/functions/save-ticket', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ref: currentTicketRef, content })
+                });
+                if (response.ok) {
+                    // refresh and close
+                    await fetchAllTickets();
+                    closeEditModal();
+                    // small UI feedback
+                    alert('Ticket updated!');
+                } else {
+                    console.error('Error updating ticket:', response.status);
+                    alert('Error updating ticket.');
+                }
+            } catch (err) {
+                console.error('Error updating ticket:', err);
+                alert('Error updating ticket.');
+            }
+        });
+
+        // Cancel handler
+        cancelBtn.addEventListener('click', () => closeEditModal());
+
+        // close modal when clicking outside the form
+        editModal.addEventListener('click', (e) => {
+            if (e.target === editModal) closeEditModal();
+        });
+
+        // Close modal on ESC
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && editModal.classList.contains('show')) {
+                closeEditModal();
+            }
+        });
+
+        // initial load
+        window.addEventListener('load', fetchAllTickets);
+    </script>
+</body>
+</html>
